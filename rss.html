@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RSS Feed Table Viewer</title>
+    <style>
+        body { font-family: 'Malgun Gothic', sans-serif; background-color: #f4f7f8; margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h2 { color: #333; margin-bottom: 20px; }
+        
+        /* 검색창 스타일 */
+        .input-group { display: flex; gap: 10px; margin-bottom: 25px; }
+        input { flex: 1; padding: 12px; border: 1px solid #ced4da; border-radius: 4px; font-size: 14px; }
+        button { padding: 10px 25px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        button:hover { background: #218838; }
+
+        /* 테이블(엑셀) 스타일 */
+        .table-wrapper { overflow-x: auto; } /* 모바일 대응 */
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; table-layout: fixed; }
+        th, td { border: 1px solid #dee2e6; padding: 12px 10px; text-align: left; }
+        
+        /* 헤더 스타일 */
+        th { background-color: #f8f9fa; color: #495057; font-weight: bold; position: sticky; top: 0; }
+        
+        /* 컬럼 너비 설정 */
+        th:nth-child(1) { width: 25%; } /* 제목 */
+        th:nth-child(2) { width: 35%; } /* 설명 */
+        th:nth-child(3) { width: 25%; } /* GUID */
+        th:nth-child(4) { width: 15%; } /* 게시일 */
+
+        tr:hover { background-color: #f1f3f5; }
+        
+        /* 텍스트 줄바꿈 방지 및 말줄임표 */
+        .ellipsis { 
+            white-space: nowrap; 
+            overflow: hidden; 
+            text-overflow: ellipsis; 
+        }
+
+        .link-text { color: #007bff; text-decoration: none; font-weight: 500; }
+        .link-text:hover { text-decoration: underline; }
+        
+        .guid-text { font-family: 'Consolas', monospace; font-size: 11px; color: #666; word-break: break-all; }
+
+        .loader { text-align: center; display: none; padding: 20px; font-weight: bold; color: #007bff; }
+        .error-msg { color: #d9534f; padding: 15px; border: 1px solid #d9534f; border-radius: 4px; margin-top: 20px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>RSS 추출 데이터 (Excel 포맷)</h2>
+    <div class="input-group">
+        <input type="text" id="rssUrl" placeholder="워드프레스, 티스토리, 블로그스팟 RSS 주소 입력">
+        <button onclick="fetchRSS()">데이터 불러오기</button>
+    </div>
+
+    <div id="loader" class="loader">데이터를 가져오는 중...</div>
+
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>제목</th>
+                    <th>설명</th>
+                    <th>GUID (Link)</th>
+                    <th>게시일</th>
+                </tr>
+            </thead>
+            <tbody id="rssTableBody">
+                <!-- 결과가 여기에 출력됩니다 -->
+                <tr>
+                    <td colspan="4" style="text-align: center; color: #999; padding: 40px;">주소를 입력하고 버튼을 눌러주세요.</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    async function fetchRSS() {
+        const rssUrl = document.getElementById('rssUrl').value.trim();
+        const tableBody = document.getElementById('rssTableBody');
+        const loader = document.getElementById('loader');
+
+        if (!rssUrl) {
+            alert('RSS 주소를 입력하세요!');
+            return;
+        }
+
+        tableBody.innerHTML = '';
+        loader.style.display = 'block';
+
+        try {
+            const apiUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssUrl)}`;
+            const response = await fetch(apiUrl);
+            const data = await response.json();
+
+            if (data.status !== 'ok') {
+                throw new Error(data.message || 'RSS를 처리할 수 없습니다.');
+            }
+
+            if (data.items.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="4" style="text-align:center;">표시할 데이터가 없습니다.</td></tr>';
+                return;
+            }
+
+            let html = '';
+            data.items.forEach(item => {
+                // 설명란 태그 제거 및 텍스트만 추출
+                const cleanDesc = item.description
+                    .replace(/<[^>]*>?/gm, '')
+                    .replace(/&nbsp;/g, ' ')
+                    .trim();
+
+                html += `
+                    <tr>
+                        <td class="ellipsis"><a href="${item.link}" target="_blank" class="link-text" title="${item.title}">${item.title}</a></td>
+                        <td class="ellipsis" title="${cleanDesc}">${cleanDesc}</td>
+                        <td class="guid-text">${item.guid}</td>
+                        <td>${item.pubDate}</td>
+                    </tr>
+                `;
+            });
+
+            tableBody.innerHTML = html;
+
+        } catch (error) {
+            console.error(error);
+            tableBody.innerHTML = `<tr><td colspan="4" class="error-msg">오류 발생: ${error.message}</td></tr>`;
+        } finally {
+            loader.style.display = 'none';
+        }
+    }
+</script>
+
+</body>
+</html>
