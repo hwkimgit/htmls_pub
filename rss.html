@@ -52,6 +52,19 @@
 <div class="container">
     <h2>RSS 추출 데이터 (Excel 포맷)</h2>
     <div class="input-group">
+        <p>
+            샘플 URL<br/>
+            워프 : https://news.realnews365.com/feed/?paged=1 <br/>
+            https://news.realnews365.com/feed/?paged=2 <br/>
+            블스 : https://bshellow.likemlike.com/feeds/posts/default?alt=rss&start-index=1 <br/>
+            https://bshellow.likemlike.com/feeds/posts/default?alt=rss&start-index=2 <br/> <br />
+            또는 https://bshellow.likemlike.com/feeds/posts/default?alt=rss&start-index=1&max-results=10 <br />
+            https://bshellow.likemlike.com/feeds/posts/default?alt=rss&start-index=11&max-results=20 <br />
+            티스(첫 페이지만 나옴) : https://nayongeelife.tistory.com/rss?page=1 <br />
+        
+        </p>
+    </div>
+    <div class="input-group">
         <input type="text" id="rssUrl" placeholder="워드프레스, 티스토리, 블로그스팟 RSS 주소 입력">
         <button onclick="fetchRSS()">데이터 불러오기</button>
     </div>
@@ -136,4 +149,5 @@
 </script>
 
 </body>
+
 </html>
