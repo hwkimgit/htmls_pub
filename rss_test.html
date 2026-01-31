@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RSS Feed Table Viewer (전체 항목)</title>
+    <style>
+        body { font-family: 'Malgun Gothic', sans-serif; background-color: #f4f7f8; margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h2 { color: #333; margin-bottom: 20px; }
+        
+        .input-group { display: flex; gap: 10px; margin-bottom: 25px; align-items: center; }
+        input { flex: 1; padding: 12px; border: 1px solid #ced4da; border-radius: 4px; font-size: 14px; }
+        button { padding: 10px 25px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        button:hover { background: #218838; }
+        
+        .count-info { font-size: 14px; color: #666; margin-left: 10px; font-weight: bold; }
+
+        .table-wrapper { overflow-x: auto; max-height: 600px; overflow-y: auto; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; table-layout: fixed; }
+        th, td { border: 1px solid #dee2e6; padding: 12px 10px; text-align: left; }
+        
+        th { background-color: #f8f9fa; color: #495057; font-weight: bold; position: sticky; top: 0; z-index: 10; }
+        
+        th:nth-child(1) { width: 25%; }
+        th:nth-child(2) { width: 35%; }
+        th:nth-child(3) { width: 25%; }
+        th:nth-child(4) { width: 15%; }
+
+        tr:hover { background-color: #f1f3f5; }
+        
+        .ellipsis { 
+            white-space: nowrap; 
+            overflow: hidden; 
+            text-overflow: ellipsis; 
+        }
+
+        .link-text { color: #007bff; text-decoration: none; font-weight: 500; }
+        .link-text:hover { text-decoration: underline; }
+        
+        .guid-text { font-family: 'Consolas', monospace; font-size: 11px; color: #666; word-break: break-all; }
+
+        .loader { text-align: center; display: none; padding: 20px; font-weight: bold; color: #007bff; }
+        .error-msg { color: #d9534f; padding: 15px; border: 1px solid #d9534f; border-radius: 4px; margin-top: 20px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>RSS 추출 데이터 (전체 항목)</h2>
+    
+    <div class="input-group">
+        <input type="text" id="rssUrl" placeholder="RSS 주소 입력" value="https://www.yna.co.kr/rss/society.xml">
+        <button onclick="fetchRSS()">데이터 불러오기</button>
+        <span id="countInfo" class="count-info"></span>
+    </div>
+
+    <div id="loader" class="loader">데이터를 가져오는 중...</div>
+
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>제목</th>
+                    <th>설명</th>
+                    <th>GUID (Link)</th>
+                    <th>게시일</th>
+                </tr>
+            </thead>
+            <tbody id="rssTableBody">
+                <tr>
+                    <td colspan="4" style="text-align: center; color: #999; padding: 40px;">주소를 입력하고 버튼을 눌러주세요.</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    async function fetchRSS() {
+        const rssUrl = document.getElementById('rssUrl').value.trim();
+        const tableBody = document.getElementById('rssTableBody');
+        const loader = document.getElementById('loader');
+        const countInfo = document.getElementById('countInfo');
+
+        if (!rssUrl) {
+            alert('RSS 주소를 입력하세요!');
+            return;
+        }
+
+        tableBody.innerHTML = '';
+        countInfo.textContent = '';
+        loader.style.display = 'block';
+
+        try {
+            // CORS 프록시 사용 (직접 파싱을 위해)
+            const proxyUrl = 'https://api.allorigins.win/raw?url=';
+            const response = await fetch(proxyUrl + encodeURIComponent(rssUrl));
+            
+            if (!response.ok) {
+                throw new Error('RSS를 불러올 수 없습니다.');
+            }
+
+            const text = await response.text();
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(text, "text/xml");
+
+            // XML 파싱 에러 체크
+            const parserError = xmlDoc.querySelector('parsererror');
+            if (parserError) {
+                throw new Error('XML 파싱 오류');
+            }
+
+            // RSS 2.0 또는 Atom 피드 감지
+            let items = xmlDoc.querySelectorAll('item');
+            if (items.length === 0) {
+                items = xmlDoc.querySelectorAll('entry'); // Atom 피드
+            }
+
+            if (items.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="4" style="text-align:center;">표시할 데이터가 없습니다.</td></tr>';
+                return;
+            }
+
+            countInfo.textContent = `총 ${items.length}개 항목`;
+
+            let html = '';
+            items.forEach(item => {
+                // RSS 2.0 형식
+                let title = item.querySelector('title')?.textContent || '제목 없음';
+                let link = item.querySelector('link')?.textContent || item.querySelector('link')?.getAttribute('href') || '#';
+                let description = item.querySelector('description')?.textContent || '';
+                let pubDate = item.querySelector('pubDate')?.textContent || '';
+                let guid = item.querySelector('guid')?.textContent || link;
+
+                // Atom 형식 대응
+                if (!pubDate) {
+                    pubDate = item.querySelector('published')?.textContent || item.querySelector('updated')?.textContent || '';
+                }
+                if (!description) {
+                    description = item.querySelector('summary')?.textContent || item.querySelector('content')?.textContent || '';
+                }
+
+                // HTML 태그 제거
+                const cleanDesc = description
+                    .replace(/<[^>]*>?/gm, '')
+                    .replace(/&nbsp;/g, ' ')
+                    .replace(/&lt;/g, '<')
+                    .replace(/&gt;/g, '>')
+                    .replace(/&amp;/g, '&')
+                    .trim();
+
+                // 날짜 포맷팅
+                let formattedDate = pubDate;
+                try {
+                    const date = new Date(pubDate);
+                    if (!isNaN(date)) {
+                        formattedDate = date.toLocaleString('ko-KR');
+                    }
+                } catch (e) {}
+
+                html += `
+                    <tr>
+                        <td class="ellipsis"><a href="${link}" target="_blank" class="link-text" title="${title}">${title}</a></td>
+                        <td class="ellipsis" title="${cleanDesc}">${cleanDesc}</td>
+                        <td class="guid-text">${guid}</td>
+                        <td>${formattedDate}</td>
+                    </tr>
+                `;
+            });
+
+            tableBody.innerHTML = html;
+
+        } catch (error) {
+            console.error(error);
+            tableBody.innerHTML = `<tr><td colspan="4" class="error-msg">오류 발생: ${error.message}<br/>CORS 문제일 수 있습니다. 다른 프록시를 시도하거나 서버 측 처리가 필요합니다.</td></tr>`;
+        } finally {
+            loader.style.display = 'none';
+        }
+    }
+</script>
+
+</body>
+</html>
