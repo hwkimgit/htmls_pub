@@ -1,0 +1,536 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>블로그 이미지 초압축기 v2</title>
+  <style>
+    :root {
+      --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --text:#f4f7fb;
+      --muted:#a9b1bf; --line:#2b313d; --accent:#7dd3fc; --good:#86efac;
+      --warn:#fde68a; --bad:#fda4af; --btn:#2563eb; --btn2:#334155;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; min-height:100vh; color:var(--text);
+      font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      background:linear-gradient(180deg,#0b0d11,#11151b 35%,#0f1115);
+    }
+    .wrap{max-width:1040px;margin:0 auto;padding:32px 18px 60px}
+    h1{margin:0 0 8px;font-size:clamp(26px,4vw,42px)}
+    .sub{color:var(--muted);margin-bottom:24px;line-height:1.65}
+    .panel{
+      width:100%; background:rgba(23,26,33,.96); border:1px solid var(--line);
+      border-radius:18px; padding:18px; box-shadow:0 20px 50px rgba(0,0,0,.22);
+    }
+    .settings{
+      display:grid; grid-template-columns:repeat(auto-fit,minmax(165px,1fr));
+      gap:12px; margin-bottom:16px;
+    }
+    .field{min-width:0;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:12px}
+    .field label{display:block;color:var(--muted);font-size:12px;margin-bottom:6px}
+    .field input,.field select{
+      width:100%; min-width:0; border:1px solid #3a4250; background:#11151b; color:var(--text);
+      border-radius:9px; padding:9px 10px; outline:none;
+    }
+    .drop{
+      display:flex; width:100%; min-height:142px; padding:28px 18px;
+      border:2px dashed #3c4656; border-radius:18px; cursor:pointer;
+      align-items:center; justify-content:center; text-align:center;
+      background:#12161d; transition:.2s ease; overflow:hidden;
+    }
+    .dropInner{max-width:100%;padding:0 12px}
+    .drop.drag{border-color:var(--accent);background:#111b24;transform:translateY(-1px)}
+    .drop strong{display:block;font-size:20px;margin-bottom:8px;overflow-wrap:anywhere}
+    .drop span{display:block;color:var(--muted);line-height:1.5;overflow-wrap:anywhere}
+    input[type=file]{display:none}
+    .actions{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+    button{
+      border:0;border-radius:11px;padding:11px 16px;font-weight:700;cursor:pointer;
+      color:white;background:var(--btn)
+    }
+    button.secondary{background:var(--btn2)}
+    button:disabled{opacity:.45;cursor:not-allowed}
+    .statusbar{margin-top:14px;color:var(--muted);font-size:13px}
+    .list{margin-top:18px;display:grid;gap:10px}
+    .item{
+      display:grid;grid-template-columns:72px minmax(0,1fr) auto;gap:12px;align-items:center;
+      background:#12161d;border:1px solid var(--line);border-radius:14px;padding:10px;min-width:0;
+    }
+    .thumb{width:72px;height:54px;object-fit:cover;border-radius:9px;background:#0b0d11}
+    .middle{min-width:0}
+    .name{font-weight:700;overflow-wrap:anywhere;word-break:break-word}
+    .meta{color:var(--muted);font-size:12px;margin-top:5px;line-height:1.55;overflow-wrap:anywhere}
+    .badge{display:inline-block;padding:3px 7px;border-radius:999px;font-size:11px;font-weight:700;margin-left:6px}
+    .good{background:rgba(134,239,172,.12);color:var(--good)}
+    .warn{background:rgba(253,230,138,.12);color:var(--warn)}
+    .bad{background:rgba(253,164,175,.12);color:var(--bad)}
+    .progress{height:7px;background:#222833;border-radius:999px;overflow:hidden;margin-top:8px}
+    .progress>div{height:100%;width:0;background:#60a5fa;transition:width .2s ease}
+    .item button{padding:8px 10px;font-size:12px;white-space:nowrap}
+    .hint{margin-top:16px;color:var(--muted);font-size:12px;line-height:1.65}
+    .mini{color:#cbd5e1;font-size:12px;margin-top:8px}
+    @media(max-width:760px){
+      .wrap{padding:20px 12px 40px}
+      .panel{padding:12px}
+      .settings{grid-template-columns:1fr 1fr}
+      .item{grid-template-columns:58px minmax(0,1fr)}
+      .thumb{width:58px;height:48px}
+      .item>.right{grid-column:1/-1;display:flex;justify-content:flex-end}
+    }
+    @media(max-width:460px){.settings{grid-template-columns:1fr}.drop strong{font-size:18px}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>블로그 이미지 초압축기 <span style="font-size:.45em;color:var(--accent)">v2</span></h1>
+    <div class="sub">
+      여러 PNG/JPG/WebP를 한 번에 WebP로 변환합니다. <b>50KB 이하</b>를 기준으로 하되,
+      기본 <b>20% 여유 압축</b>을 적용해 약 <b>40KB 전후</b>도 적극적으로 노립니다.
+      그래도 어려우면 최대 허용 용량(기본 80KB) 안에서 최대한 맞춥니다. 이미지는 외부로 업로드되지 않습니다.
+    </div>
+
+    <div class="panel">
+      <div class="settings">
+        <div class="field">
+          <label>우선 목표 상한 (KB)</label>
+          <input id="preferKB" type="number" min="10" max="500" value="50" />
+        </div>
+        <div class="field">
+          <label>여유 압축 (%)</label>
+          <input id="headroom" type="number" min="0" max="60" value="20" />
+        </div>
+        <div class="field">
+          <label>최대 허용 용량 (KB)</label>
+          <input id="hardKB" type="number" min="10" max="1000" value="80" />
+        </div>
+        <div class="field">
+          <label>최대 가로폭 (px)</label>
+          <input id="maxWidth" type="number" min="320" max="4000" value="1000" />
+        </div>
+        <div class="field">
+          <label>일반 최소 가로폭 (px)</label>
+          <input id="minWidth" type="number" min="320" max="2000" value="560" />
+        </div>
+      </div>
+
+      <label class="drop" id="dropZone" for="fileInput">
+        <div class="dropInner">
+          <strong>이미지를 여기에 끌어다 놓으세요</strong>
+          <span>또는 클릭해서 PNG / JPG / WebP 여러 장 선택</span>
+          <div class="mini">설정 50KB + 여유 20% → 실제 우선 목표는 약 40KB</div>
+        </div>
+      </label>
+      <input id="fileInput" type="file" accept="image/png,image/jpeg,image/webp" multiple />
+
+      <div class="actions">
+        <button id="startBtn" disabled>모두 압축하기</button>
+        <button id="downloadAllBtn" class="secondary" disabled>전체 ZIP 다운로드</button>
+        <button id="clearBtn" class="secondary" disabled>목록 비우기</button>
+      </div>
+      <div class="statusbar" id="status">이미지를 추가해 주세요.</div>
+      <div class="list" id="list"></div>
+      <div class="hint">
+        팁: 더 작게 만들고 싶으면 <b>여유 압축</b>을 30~40%로 올려 보세요.
+        예: 50KB + 40% 여유 → 약 30KB를 먼저 노립니다. 80KB를 넘는 경우에는 마지막 수단으로 320px까지 자동 축소합니다.
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const fileInput = document.getElementById('fileInput');
+  const dropZone = document.getElementById('dropZone');
+  const startBtn = document.getElementById('startBtn');
+  const downloadAllBtn = document.getElementById('downloadAllBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const listEl = document.getElementById('list');
+  const statusEl = document.getElementById('status');
+  const preferKBEl = document.getElementById('preferKB');
+  const headroomEl = document.getElementById('headroom');
+  const hardKBEl = document.getElementById('hardKB');
+  const maxWidthEl = document.getElementById('maxWidth');
+  const minWidthEl = document.getElementById('minWidth');
+
+  const items = [];
+  let running = false;
+
+  const kb = bytes => (bytes / 1024).toFixed(bytes < 1024 * 100 ? 1 : 0) + ' KB';
+  const pct = (a, b) => Math.max(0, Math.round((1 - b / a) * 100));
+  const baseName = name => name.replace(/\.[^.]+$/, '');
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+  function getTargets() {
+    const preferKB = Math.max(10, +preferKBEl.value || 50);
+    const hardKB = Math.max(preferKB, +hardKBEl.value || 80);
+    const headroom = clamp(+headroomEl.value || 0, 0, 60);
+    const sweetKB = Math.max(8, preferKB * (1 - headroom / 100));
+    return { preferKB, hardKB, headroom, sweetKB,
+      preferBytes: preferKB * 1024, hardBytes: hardKB * 1024, sweetBytes: sweetKB * 1024 };
+  }
+
+  function render() {
+    listEl.innerHTML = '';
+    const t = getTargets();
+
+    items.forEach(it => {
+      const row = document.createElement('div');
+      row.className = 'item';
+
+      const img = document.createElement('img');
+      img.className = 'thumb';
+      img.src = it.previewUrl;
+      row.appendChild(img);
+
+      const mid = document.createElement('div');
+      mid.className = 'middle';
+      const name = document.createElement('div');
+      name.className = 'name';
+      name.textContent = it.file.name;
+
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      if (it.state === 'queued') {
+        meta.textContent = `원본 ${kb(it.file.size)} · 대기 중`;
+      } else if (it.state === 'processing') {
+        meta.textContent = `원본 ${kb(it.file.size)} · 최적값 찾는 중...`;
+      } else if (it.state === 'done') {
+        let badgeClass = 'bad', badgeText = `${Math.round(t.hardKB)}KB 초과`;
+        if (it.result.size <= t.sweetBytes) {
+          badgeClass = 'good'; badgeText = `여유 목표 ${t.sweetKB.toFixed(0)}KB 달성`;
+        } else if (it.result.size <= t.preferBytes) {
+          badgeClass = 'good'; badgeText = `${Math.round(t.preferKB)}KB 이하`;
+        } else if (it.result.size <= t.hardBytes) {
+          badgeClass = 'warn'; badgeText = `${Math.round(t.hardKB)}KB 이하`;
+        }
+        meta.innerHTML = `원본 ${kb(it.file.size)} → <b>${kb(it.result.size)}</b> · ${it.result.width}×${it.result.height} · 품질 ${Math.round(it.result.quality * 100)} · ${pct(it.file.size, it.result.size)}% 감소 <span class="badge ${badgeClass}">${badgeText}</span>`;
+      } else if (it.state === 'error') {
+        meta.innerHTML = `<span style="color:var(--bad)">오류: ${escapeHtml(it.error)}</span>`;
+      }
+
+      const progress = document.createElement('div');
+      progress.className = 'progress';
+      const bar = document.createElement('div');
+      bar.style.width = (it.progress || 0) + '%';
+      progress.appendChild(bar);
+      mid.append(name, meta, progress);
+      row.appendChild(mid);
+
+      const right = document.createElement('div');
+      right.className = 'right';
+      if (it.state === 'done') {
+        const btn = document.createElement('button');
+        btn.textContent = '다운로드';
+        btn.onclick = () => downloadResult(it);
+        right.appendChild(btn);
+      }
+      row.appendChild(right);
+      listEl.appendChild(row);
+    });
+
+    const hasItems = items.length > 0;
+    const doneCount = items.filter(x => x.state === 'done').length;
+    startBtn.disabled = !hasItems || running;
+    clearBtn.disabled = !hasItems || running;
+    downloadAllBtn.disabled = doneCount === 0 || running;
+    statusEl.textContent = hasItems
+      ? `${items.length}장 · 완료 ${doneCount}장${running ? ' · 처리 중...' : ''} · 현재 여유 목표 약 ${t.sweetKB.toFixed(0)}KB`
+      : '이미지를 추가해 주세요.';
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+  }
+
+  function addFiles(fileList) {
+    [...fileList].forEach(file => {
+      if (!file.type.startsWith('image/')) return;
+      const previewUrl = URL.createObjectURL(file);
+      items.push({ file, previewUrl, state: 'queued', progress: 0, result: null });
+    });
+    render();
+  }
+
+  fileInput.addEventListener('change', e => {
+    addFiles(e.target.files);
+    fileInput.value = '';
+  });
+
+  ['dragenter','dragover'].forEach(ev => dropZone.addEventListener(ev, e => {
+    e.preventDefault(); dropZone.classList.add('drag');
+  }));
+  ['dragleave','drop'].forEach(ev => dropZone.addEventListener(ev, e => {
+    e.preventDefault(); dropZone.classList.remove('drag');
+  }));
+  dropZone.addEventListener('drop', e => addFiles(e.dataTransfer.files));
+
+  [preferKBEl, headroomEl, hardKBEl, maxWidthEl, minWidthEl].forEach(el => {
+    el.addEventListener('change', () => {
+      if (running) return;
+      items.forEach(it => {
+        if (it.state === 'done' || it.state === 'error') {
+          it.state = 'queued'; it.result = null; it.error = null; it.progress = 0;
+        }
+      });
+      render();
+    });
+  });
+
+  function canvasToBlob(canvas, quality) {
+    return new Promise((resolve, reject) => {
+      canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('WebP 변환 실패')), 'image/webp', quality);
+    });
+  }
+
+  async function loadBitmap(file) {
+    if ('createImageBitmap' in window) {
+      try { return await createImageBitmap(file); } catch (_) {}
+    }
+    return await new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('이미지를 읽을 수 없습니다.')); };
+      img.src = url;
+    });
+  }
+
+  function makeCanvas(bitmap, width) {
+    const srcW = bitmap.width || bitmap.naturalWidth;
+    const srcH = bitmap.height || bitmap.naturalHeight;
+    const w = Math.min(width, srcW);
+    const h = Math.max(1, Math.round(srcH * (w / srcW)));
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d', { alpha:true });
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    return canvas;
+  }
+
+  async function bestQualityForTarget(canvas, targetBytes, minQ = 0.36, maxQ = 0.92) {
+    const minBlob = await canvasToBlob(canvas, minQ);
+    if (minBlob.size > targetBytes) return null;
+
+    let low = minQ, high = maxQ;
+    let best = { blob:minBlob, quality:minQ };
+    for (let i = 0; i < 8; i++) {
+      const q = (low + high) / 2;
+      const blob = await canvasToBlob(canvas, q);
+      if (blob.size <= targetBytes) {
+        best = { blob, quality:q }; low = q;
+      } else high = q;
+    }
+    return best;
+  }
+
+  function makeWidths(startW, floorW, factor = 0.91) {
+    const arr = [];
+    let w = startW;
+    while (w > floorW) { arr.push(Math.round(w)); w *= factor; }
+    arr.push(Math.min(startW, floorW));
+    return [...new Set(arr)].sort((a,b) => b-a);
+  }
+
+  async function compressImage(file, onProgress) {
+    const t = getTargets();
+    const requestedMaxW = Math.max(320, +maxWidthEl.value || 1000);
+    const requestedMinW = Math.max(320, Math.min(requestedMaxW, +minWidthEl.value || 560));
+
+    const bitmap = await loadBitmap(file);
+    const srcW = bitmap.width || bitmap.naturalWidth;
+    const startW = Math.min(srcW, requestedMaxW);
+    const normalWidths = makeWidths(startW, requestedMinW, 0.91);
+
+    let fallbackPrefer = null;
+    let fallbackHard = null;
+
+    for (let i = 0; i < normalWidths.length; i++) {
+      const canvas = makeCanvas(bitmap, normalWidths[i]);
+
+      // A. 여유 목표(예: 40KB)를 먼저 노림.
+      const sweet = await bestQualityForTarget(canvas, t.sweetBytes, 0.40, 0.92);
+      if (sweet) {
+        if (bitmap.close) bitmap.close();
+        onProgress(100);
+        return { blob:sweet.blob, size:sweet.blob.size, quality:sweet.quality,
+          width:canvas.width, height:canvas.height, tier:'sweet' };
+      }
+
+      // B. 여유 목표가 안 되면 50KB 이하 후보를 보관.
+      const pref = await bestQualityForTarget(canvas, t.preferBytes, 0.36, 0.92);
+      if (pref && !fallbackPrefer) {
+        fallbackPrefer = { blob:pref.blob, size:pref.blob.size, quality:pref.quality,
+          width:canvas.width, height:canvas.height, tier:'preferred' };
+      }
+
+      // C. 최종 안전선 80KB 이하 후보.
+      const hard = await bestQualityForTarget(canvas, t.hardBytes, 0.30, 0.92);
+      if (hard && !fallbackHard) {
+        fallbackHard = { blob:hard.blob, size:hard.blob.size, quality:hard.quality,
+          width:canvas.width, height:canvas.height, tier:'hard' };
+      }
+
+      onProgress(Math.round(((i + 1) / normalWidths.length) * 82));
+      await new Promise(r => setTimeout(r, 0));
+    }
+
+    if (fallbackPrefer) {
+      if (bitmap.close) bitmap.close();
+      onProgress(100); return fallbackPrefer;
+    }
+    if (fallbackHard) {
+      if (bitmap.close) bitmap.close();
+      onProgress(100); return fallbackHard;
+    }
+
+    // D. 80KB가 정말 안 나오면 320px까지 긴급 축소.
+    const emergencyWidths = makeWidths(Math.min(requestedMinW, startW), 320, 0.88);
+    let last = null;
+    for (let i = 0; i < emergencyWidths.length; i++) {
+      const canvas = makeCanvas(bitmap, emergencyWidths[i]);
+      for (const q of [0.28,0.24,0.20,0.16,0.12]) {
+        const blob = await canvasToBlob(canvas, q);
+        last = { blob, size:blob.size, quality:q, width:canvas.width, height:canvas.height,
+          tier:blob.size <= t.hardBytes ? 'hard' : 'over' };
+        if (blob.size <= t.hardBytes) {
+          if (bitmap.close) bitmap.close();
+          onProgress(100); return last;
+        }
+      }
+      onProgress(82 + Math.round(((i + 1) / emergencyWidths.length) * 17));
+      await new Promise(r => setTimeout(r, 0));
+    }
+
+    if (bitmap.close) bitmap.close();
+    onProgress(100);
+    return last;
+  }
+
+  function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 3000);
+  }
+
+  function downloadResult(it) {
+    if (!it.result) return;
+    downloadBlob(it.result.blob, `${baseName(it.file.name)}.webp`);
+  }
+
+  startBtn.addEventListener('click', async () => {
+    if (running) return;
+    running = true; render();
+    for (const it of items) {
+      if (it.state === 'done') continue;
+      it.state = 'processing'; it.progress = 2; render();
+      try {
+        it.result = await compressImage(it.file, p => { it.progress = p; render(); });
+        it.state = 'done';
+      } catch (err) {
+        it.state = 'error'; it.error = err?.message || String(err);
+      }
+      render();
+    }
+    running = false; render();
+  });
+
+  // ---- ZIP (무압축 저장 방식) ----
+  let crcTable = null;
+  function getCrcTable() {
+    if (crcTable) return crcTable;
+    crcTable = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      crcTable[n] = c >>> 0;
+    }
+    return crcTable;
+  }
+  function crc32(u8) {
+    const table = getCrcTable();
+    let c = 0xFFFFFFFF;
+    for (let i = 0; i < u8.length; i++) c = table[(c ^ u8[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+  function dosDateTime(d = new Date()) {
+    const year = Math.max(1980, d.getFullYear());
+    const time = (d.getHours() << 11) | (d.getMinutes() << 5) | Math.floor(d.getSeconds() / 2);
+    const date = ((year - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+    return { time, date };
+  }
+  function u16(n){ const b=new Uint8Array(2),v=new DataView(b.buffer); v.setUint16(0,n,true); return b; }
+  function u32(n){ const b=new Uint8Array(4),v=new DataView(b.buffer); v.setUint32(0,n>>>0,true); return b; }
+  function concat(parts) {
+    const len = parts.reduce((s,p) => s + p.length, 0);
+    const out = new Uint8Array(len); let off = 0;
+    for (const p of parts) { out.set(p, off); off += p.length; }
+    return out;
+  }
+  async function makeZip(entries) {
+    const enc = new TextEncoder();
+    const locals = [], centrals = [];
+    let offset = 0;
+    const dt = dosDateTime();
+
+    for (const entry of entries) {
+      const name = enc.encode(entry.name);
+      const data = new Uint8Array(await entry.blob.arrayBuffer());
+      const crc = crc32(data);
+      const flags = 0x0800; // UTF-8
+
+      const local = concat([
+        u32(0x04034b50), u16(20), u16(flags), u16(0), u16(dt.time), u16(dt.date),
+        u32(crc), u32(data.length), u32(data.length), u16(name.length), u16(0), name, data
+      ]);
+      locals.push(local);
+
+      const central = concat([
+        u32(0x02014b50), u16(20), u16(20), u16(flags), u16(0), u16(dt.time), u16(dt.date),
+        u32(crc), u32(data.length), u32(data.length), u16(name.length), u16(0), u16(0),
+        u16(0), u16(0), u32(0), u32(offset), name
+      ]);
+      centrals.push(central);
+      offset += local.length;
+    }
+
+    const centralDir = concat(centrals);
+    const localPart = concat(locals);
+    const eocd = concat([
+      u32(0x06054b50), u16(0), u16(0), u16(entries.length), u16(entries.length),
+      u32(centralDir.length), u32(localPart.length), u16(0)
+    ]);
+    return new Blob([localPart, centralDir, eocd], { type:'application/zip' });
+  }
+
+  downloadAllBtn.addEventListener('click', async () => {
+    const done = items.filter(x => x.state === 'done');
+    if (!done.length) return;
+    downloadAllBtn.disabled = true;
+    downloadAllBtn.textContent = 'ZIP 만드는 중...';
+    try {
+      const entries = done.map(it => ({ name:`${baseName(it.file.name)}.webp`, blob:it.result.blob }));
+      const zip = await makeZip(entries);
+      downloadBlob(zip, `blog_webp_${new Date().toISOString().slice(0,10)}.zip`);
+    } catch (e) {
+      alert('ZIP 생성 중 오류가 발생했습니다: ' + (e?.message || e));
+    } finally {
+      downloadAllBtn.textContent = '전체 ZIP 다운로드';
+      render();
+    }
+  });
+
+  clearBtn.addEventListener('click', () => {
+    if (running) return;
+    items.forEach(it => URL.revokeObjectURL(it.previewUrl));
+    items.length = 0; render();
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
